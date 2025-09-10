@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#EE4D2D">
     <title>Aplikasi Resi Pickup Shopee Xpress</title>
+    <!-- Favicon: Gunakan spx.png (512x205px). Untuk PWA dan favicon terbaik, edit menjadi persegi (misal, 512x512px) -->
+    <link rel="icon" type="image/png" href="spx.png">
+    <link rel="manifest" href="manifest.json">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
@@ -23,8 +27,16 @@
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
         h1 {
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: #EE4D2D;
+        }
+        .logo {
+            max-width: 100px;
+            margin-right: 10px;
+            vertical-align: middle;
+            object-fit: contain;
         }
         h2 {
             color: #EE4D2D;
@@ -63,6 +75,10 @@
         #pasteForm button {
             padding: 12px;
             font-size: 16px;
+        }
+        #installButton {
+            display: none;
+            margin-top: 10px;
         }
         #searchInput {
             margin-bottom: 20px;
@@ -116,6 +132,7 @@
             flex-direction: row;
             padding: 20px;
             box-sizing: border-box;
+            touch-action: manipulation;
         }
         #qrOverlay.show {
             display: flex;
@@ -156,25 +173,6 @@
             text-align: center;
             color: #EE4D2D;
         }
-        #closeButton {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: #EE4D2D;
-            color: white;
-            padding: 12px;
-            min-width: 60px;
-            min-height: 48px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-family: 'Roboto', sans-serif;
-            font-size: 16px;
-            touch-action: manipulation;
-        }
-        #closeButton:hover {
-            background: #d43f21;
-        }
         .info {
             font-size: 14px;
             color: #666;
@@ -186,6 +184,15 @@
         @media (max-width: 600px) {
             .container {
                 padding: 10px;
+            }
+            .logo {
+                max-width: 60px;
+            }
+            #installButton {
+                display: block;
+                width: 100%;
+                min-height: 44px;
+                font-size: 14px;
             }
             form {
                 flex-direction: column;
@@ -222,20 +229,16 @@
             #courierName {
                 font-size: 20px;
             }
-            #closeButton {
-                top: 10px;
-                right: 10px;
-                min-width: 50px;
-                min-height: 44px;
-                font-size: 14px;
-                padding: 10px;
-            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Aplikasi Resi Pickup Shopee Xpress</h1>
+        <h1>
+            <img src="spx.png" alt="Shopee Xpress Logo" class="logo">
+            Aplikasi Resi Pickup Shopee Xpress
+        </h1>
+        <button id="installButton" class="install-button">Install Aplikasi</button>
         
         <!-- Form Paste Data -->
         <form id="pasteForm">
@@ -254,7 +257,6 @@
 
     <!-- QR Overlay -->
     <div id="qrOverlay">
-        <button id="closeButton">Tutup</button>
         <div id="qrOverlayContent">
             <div id="barcodeContainer">
                 <canvas id="barcodeCanvas"></canvas>
@@ -269,8 +271,9 @@
 
     <script>
         let dataList = JSON.parse(localStorage.getItem('pickupData')) || [];
+        let deferredPrompt;
 
-        // Cek canvas support dan library
+        // Cek canvas support, library, dan pemuatan logo/favicon
         window.onload = function() {
             const canvas = document.createElement('canvas');
             if (!canvas.getContext) {
@@ -285,11 +288,53 @@
                 document.getElementById('errorMessage').textContent = 'Error: Library JsBarcode tidak dimuat. Periksa koneksi internet atau gunakan file lokal.';
                 console.error('JsBarcode is not defined');
             }
+            // Cek pemuatan logo
+            const logoImg = document.querySelector('.logo');
+            logoImg.addEventListener('error', () => {
+                console.error('Gagal memuat logo/favicon spx.png. Pastikan file ada di direktori yang sama atau gunakan path yang benar.');
+                document.getElementById('errorMessage').textContent = 'Error: Gagal memuat logo spx.png. Pastikan file ada di direktori yang sama.';
+            });
             // Inisialisasi pickedUp jika belum ada
             dataList = dataList.map(item => ({ ...item, pickedUp: item.pickedUp || false }));
             localStorage.setItem('pickupData', JSON.stringify(dataList));
             renderData();
+
+            // Daftarkan service worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js').then(() => {
+                    console.log('Service Worker terdaftar');
+                }).catch(error => {
+                    console.error('Gagal mendaftarkan Service Worker:', error);
+                });
+            }
         };
+
+        // Tangani event beforeinstallprompt untuk tombol install
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installButton = document.getElementById('installButton');
+            if (window.innerWidth <= 600) {
+                installButton.style.display = 'block';
+            }
+        });
+
+        // Tangani klik tombol install
+        document.getElementById('installButton').addEventListener('click', () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('Pengguna menerima instalasi PWA');
+                    } else {
+                        console.log('Pengguna menolak instalasi PWA');
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                alert('Untuk menginstal aplikasi, gunakan opsi "Tambah ke Layar Utama" di browser Anda (biasanya di menu browser).');
+            }
+        });
 
         // Render daftar data
         function renderData(filteredData = dataList) {
@@ -510,9 +555,11 @@
             alert('Data telah direset.');
         }
 
-        // Tutup overlay
-        document.getElementById('closeButton').addEventListener('click', () => {
-            document.getElementById('qrOverlay').classList.remove('show');
+        // Tutup overlay dengan klik di luar qrOverlayContent
+        document.getElementById('qrOverlay').addEventListener('click', (e) => {
+            if (!e.target.closest('#qrOverlayContent')) {
+                document.getElementById('qrOverlay').classList.remove('show');
+            }
         });
 
         // Initial render
